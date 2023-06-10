@@ -41,6 +41,23 @@ def retrieve_lights(base_url):
         return None
 
 
+import requests
+
+
+def turn_off_all_lights(base_url, lights, state):
+    """
+    Turn off all lights using the Philips Hue API.
+    :param state:
+    :param lights:
+    :param base_url: The base URL to access the Philips Hue API.
+    """
+    # Loop through each light and turn it off
+    for light_id in lights:
+        requests.put(f"{base_url}/{light_id}/state", json={"on": state}, verify=False)
+        print(f"{base_url}/{light_id}/state")
+        print(f"Turned off light {light_id}")
+
+
 def process_lights(base_url, lights):
     if lights is not None:
         for index, light_id in enumerate(custom_order):
@@ -56,3 +73,19 @@ def process_lights(base_url, lights):
                     color = rainbow_colors[index % len(rainbow_colors)]
                     set_light_color(base_url, str_light_id, color)
                     time.sleep(1)  # Optional: sleep 1 second between setting each light to see the change gradually
+
+
+def get_light_colors(lights):
+        for light_id in custom_order:
+            str_light_id = str(light_id)
+            if str_light_id in lights and 'state' in lights[str_light_id] and 'hue' in lights[str_light_id]['state']:
+                hue = lights[str_light_id]['state']['hue']
+                print(f"Light {light_id} has hue: {hue}")
+
+def test():
+    base_url = "https://192.168.1.247/api/D2FyCAxPndXkL71a6l5PlTuhCM6aCTMf-NSiB7Ns/lights"
+    lights = retrieve_lights(base_url=base_url)
+    turn_off_all_lights(base_url, lights)
+    # process_lights(base_url, lights)
+    # get_light_colors(lights)
+# test()
